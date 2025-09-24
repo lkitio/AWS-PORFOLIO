@@ -1,0 +1,159 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Chime Bank Customer Onboarding - IAM Roles'
+
+Parameters:
+  CustomerDataPolicyArn:
+    Type: String
+    Description: ARN of the Customer Data Policy
+    Default: ''
+  
+  OnboardingAppPolicyArn:
+    Type: String
+    Description: ARN of the Onboarding App Policy
+    Default: ''
+
+Resources:
+  # EC2 Instance Role for Customer Onboarding Application
+  EC2CustomerOnboardingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EC2-CustomerOnboarding-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - !If
+          - HasCustomerDataPolicy
+          - !Ref CustomerDataPolicyArn
+          - !Ref AWS::NoValue
+      Tags:
+        - Key: Purpose
+          Value: CustomerOnboarding
+        - Key: Environment
+          Value: Development
+
+  # Instance Profile for EC2 Role
+  EC2CustomerOnboardingInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: EC2-CustomerOnboarding-InstanceProfile
+      Roles:
+        - !Ref EC2CustomerOnboardingRole
+
+  # Lambda Execution Role for Data Processing
+  LambdaDataProcessorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: Lambda-DataProcessor-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !If
+          - HasOnboardingAppPolicy
+          - !Ref OnboardingAppPolicyArn
+          - !Ref AWS::NoValue
+      Tags:
+        - Key: Purpose
+          Value: DataProcessing
+        - Key: Environment
+          Value: Development
+
+  # API Gateway Execution Role
+  ApiGatewayExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ApiGateway-Execution-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ApiGatewayExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: 
+                  - arn:aws:lambda:*:*:function:chime-bank-*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - logs:PutLogEvents
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                Resource: '*'
+
+  # CodeDeploy Service Role
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeDeploy-Service-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codedeploy.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployForECSRole
+      Tags:
+        - Key: Purpose
+          Value: Deployment
+        - Key: Environment
+          Value: Development
+
+Conditions:
+  HasCustomerDataPolicy: !Not [!Equals [!Ref CustomerDataPolicyArn, '']]
+  HasOnboardingAppPolicy: !Not [!Equals [!Ref OnboardingAppPolicyArn, '']]
+
+Outputs:
+  EC2RoleArn:
+    Description: ARN of the EC2 Customer Onboarding Role
+    Value: !GetAtt EC2CustomerOnboardingRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-EC2Role'
+
+  EC2InstanceProfileArn:
+    Description: ARN of the EC2 Instance Profile
+    Value: !GetAtt EC2CustomerOnboardingInstanceProfile.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-EC2InstanceProfile'
+
+  LambdaRoleArn:
+    Description: ARN of the Lambda Data Processor Role
+    Value: !GetAtt LambdaDataProcessorRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaRole'
+
+  ApiGatewayRoleArn:
+    Description: ARN of the API Gateway Execution Role
+    Value: !GetAtt ApiGatewayExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiGatewayRole'
+
+  CodeDeployRoleArn:
+    Description: ARN of the CodeDeploy Service Role
+    Value: !GetAtt CodeDeployServiceRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CodeDeployRole'

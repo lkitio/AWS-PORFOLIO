@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Chime Bank Customer Onboarding - IAM Policies'
+
+Resources:
+  # Custom policy for customer data access
+  ChimeBankCustomerDataPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyName: ChimeBankCustomerDataPolicy
+      Description: Policy for accessing customer data in the onboarding application
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowS3CustomerDataAccess
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: 
+              - arn:aws:s3:::chime-bank-customer-data/*
+          - Sid: AllowRDSAccess
+            Effect: Allow
+            Action:
+              - rds:DescribeDBInstances
+              - rds:DescribeDBClusters
+            Resource: '*'
+          - Sid: AllowSecretsManagerAccess
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: 
+              - arn:aws:secretsmanager:*:*:secret:chime-bank/database/*
+
+  # Policy for onboarding application operations
+  OnboardingAppPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyName: OnboardingAppPolicy
+      Description: Policy for onboarding application operations
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowLambdaInvoke
+            Effect: Allow
+            Action:
+              - lambda:InvokeFunction
+            Resource: 
+              - arn:aws:lambda:*:*:function:chime-bank-*
+          - Sid: AllowSQSOperations
+            Effect: Allow
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+            Resource: 
+              - arn:aws:sqs:*:*:chime-bank-*
+          - Sid: AllowCloudWatchLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: 
+              - arn:aws:logs:*:*:log-group:/aws/lambda/chime-bank-*
+
+  # Policy for development team
+  DeveloperPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyName: ChimeBankDeveloperPolicy
+      Description: Policy for developers working on the onboarding application
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowEC2Operations
+            Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+              - ec2:DescribeImages
+              - ec2:DescribeKeyPairs
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeVpcs
+            Resource: '*'
+          - Sid: AllowCloudFormationRead
+            Effect: Allow
+            Action:
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackResources
+              - cloudformation:ListStacks
+            Resource: '*'
+          - Sid: DenyProductionResources
+            Effect: Deny
+            Action: '*'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'aws:RequestedRegion': 'us-east-1'
+              StringLike:
+                'aws:PrincipalTag/Environment': 'production'
+
+Outputs:
+  CustomerDataPolicyArn:
+    Description: ARN of the Customer Data Policy
+    Value: !Ref ChimeBankCustomerDataPolicy
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomerDataPolicy'
+
+  OnboardingAppPolicyArn:
+    Description: ARN of the Onboarding App Policy
+    Value: !Ref OnboardingAppPolicy
+    Export:
+      Name: !Sub '${AWS::StackName}-OnboardingAppPolicy'
+
+  DeveloperPolicyArn:
+    Description: ARN of the Developer Policy
+    Value: !Ref DeveloperPolicy
+    Export:
+      Name: !Sub '${AWS::StackName}-DeveloperPolicy'
